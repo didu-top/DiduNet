@@ -1,4 +1,4 @@
-# KfangNet
+# DiduNet
 
 A description of this package.
-# KfangNet
+# DiduNet

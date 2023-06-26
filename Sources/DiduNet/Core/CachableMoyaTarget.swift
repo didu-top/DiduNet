@@ -9,19 +9,9 @@
 import Foundation
 @_exported import Moya
 
-/// 处理缓存的方式
-public enum SanboxCacheMethod {
-    /// 不需要缓存
-    case none
-    /// 需要沙盒缓存，并传入缓存Key值
-    case key(String)
-    
-}
 
 /// 扩展Moya 接口API协议，提供接口缓存能力
 public protocol CachableTarget: TargetType {
-    /// 缓存方法属性
-    var cacheMethod: SanboxCacheMethod { get }
     
     /// 使用URLRequest缓存策略
     var cachePolicy: URLRequest.CachePolicy? { get }

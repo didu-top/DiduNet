@@ -11,12 +11,12 @@ import Foundation
 public typealias KFResult<T> = Result<T, KFError>
 
 extension KFResult {
-    
-    /// 获取成功状态的值
-    var value: Success? {
-        if case .success(let val) = self {
-            return val
-        }
-        return nil
+  
+  /// 获取成功状态的值
+  var value: Success? {
+    if case .success(let val) = self {
+      return val
     }
+    return nil
+  }
 }

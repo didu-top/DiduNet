@@ -59,8 +59,35 @@ public final class CodableHandler<Model>: RequestHandler<Model> where Model: Cod
   }
 }
 
+/// 基于Codable的Handler实现，自定义ResponseModel解析
+public final class ResponseHandler<Resp>: RequestHandler<Resp>
 
-public func handler<T: Codable>(_ type: T.Type, completion: @escaping (KFResult<T>) -> Void) -> CodableHandler<T> {
+where Resp: Codable {
+  typealias Resp = Model
+  
+  public override func decode(data: Data) -> KFResult<Resp> {
+    // 网络数据解析成功
+    do {
+      let resp = try JSONDecoder().decode(Resp.self, from: data)
+      return .success(resp)
+    }
+    catch let err as KFError { // 无result
+      return .failure(err)
+    }
+    catch { // 数据解析失败
+      return .failure(KFError.decodeError)
+    }
+  }
+}
+
+
+public func handler<T: Codable>(_ type: T.Type,
+                                completion: @escaping (KFResult<T>) -> Void) -> CodableHandler<T> {
   return CodableHandler(completion: completion)
+}
+
+public func handler<T: Codable>(customResponse type: T.Type,
+                                completion: @escaping (KFResult<T>) -> Void) -> ResponseHandler<T> {
+  return ResponseHandler(completion: completion)
 }
 

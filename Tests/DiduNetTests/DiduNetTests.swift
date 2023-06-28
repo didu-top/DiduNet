@@ -4,7 +4,7 @@ import XCTest
 struct Api: CachableTarget {
   var baseURL: URL = URL(string: "http://192.168.194.52:8000")!
   
-  var path: String = "/test.json"
+  var path: String = "/test2.json"
   
   var method: Moya.Method = .get
   
@@ -14,14 +14,18 @@ struct Api: CachableTarget {
   
   
 }
+struct ResponseModel<T>: Codable where T: Codable {
+  var code: Int
+  var message: String?
+  var result: T?
+}
+
 
 final class DiduNetTests: XCTestCase {
     func testExample() async throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct
-        // results.
-//        XCTAssertEqual(DiduNet().text, "Hello, World!")
-      let t = await Network.request(api: Api(), forType: Int.self)
+
+//      let t = await Network.request(api: Api(), forType: Int.self)
+      let t = await Network.request(api: Api(), forResponse: ResponseModel<String>.self)
       print(t)
       if case .failure(let failure) = t {
         XCTFail()

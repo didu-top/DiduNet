@@ -10,7 +10,8 @@ import Foundation
 
 /// 二选一类型
 /// 给定两种类型, 要么出现this 要么出现that 否则出错
-public enum Switcher<This,That>: Codable where This: Codable, That: Codable {
+public enum Switcher<This,That, ErrorCode>: Codable
+where This: Codable, That: Codable {
   case this(This)
   case that(That)
   
@@ -21,7 +22,7 @@ public enum Switcher<This,That>: Codable where This: Codable, That: Codable {
     } else if let that = try? container.decode(That.self) {
       self = .that(that)
     } else {
-      throw KFError.decodeError
+      throw DNError.decodeError
     }
   }
 }

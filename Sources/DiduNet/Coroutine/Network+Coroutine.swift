@@ -12,7 +12,7 @@ extension Network {
   /// 获取原始数据
   public static func requestData<API>(api: API,
                                       enableLog: Bool = false,
-                                      progress: Progress? = nil) async -> KFResult<Data>
+                                      progress: Progress? = nil) async -> DNResult<Data>
   where API: CachableTarget {
     
     return await withCheckedContinuation({ continuation in
@@ -39,7 +39,7 @@ extension Network {
   public static func request<API,Resp>(api: API,
                                        enableLog: Bool = false,
                                        progress: Progress? = nil,
-                                       forResponse type: Resp.Type) async -> KFResult<Resp>
+                                       forResponse type: Resp.Type) async -> DNResult<Resp>
   where API: CachableTarget,
         Resp: Codable {
           
@@ -56,7 +56,7 @@ extension Network {
                   let model = try JSONDecoder().decode(Resp.self, from: resp.data)
                   continuation.resume(returning: .success(model))
                 } catch {
-                  let err = (error as? KFError) ?? KFError.decodeError
+                  let err = (error as? DNError) ?? .decodeError
                   continuation.resume(returning: .failure(err))
                 }
               case .failure(let error):
@@ -70,7 +70,7 @@ extension Network {
   public static func request<API, T>(api: API,
                                      enableLog: Bool = false,
                                      progress: Progress? = nil,
-                                     forType type: T.Type) async -> KFResult<T>
+                                     forType type: T.Type) async -> DNResult<T>
   where API: CachableTarget,
         T: Codable {
           
@@ -81,9 +81,9 @@ extension Network {
           switch resp {
           case .success(let model):
             switch model {
-            case .success(let t):
+            case .pass(let t):
               return .success(t)
-            case .fail(let error):
+            case .error(let error):
               return .failure(error)
             }
           case .failure(let error):

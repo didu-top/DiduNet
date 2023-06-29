@@ -12,8 +12,14 @@ import Foundation
 @_exported import Reachability
 import DiduFoundation
 
-public typealias Callback<T> = (KFResult<T>) -> Void
+public enum CatchAction {
+  case markCancel
+  case waitForAnotherRequestCompleted
+  case `continue`
+}
 
+public typealias Callback<T> = (DNResult<T>) -> Void
+public typealias CatchCallback = (CatchAction) ->Void
 
 internal let logger = Logger(lowerLevel: .verbose, prefixMap: [
   .verbose: "􀤆􀤆 - 🗒 => ",
@@ -23,13 +29,32 @@ internal let logger = Logger(lowerLevel: .verbose, prefixMap: [
 
 
 // MARK: - 网络请求（返回原始数据）
-public struct Network {
-  
-  /// 全局处理网络请求错误
-  /// 返回值确定是否继续执行block回调
-  public static var globalCactchNetworkError: ((TargetType, KFError, (() -> Void)?) -> Void)?
+public class Network {
   
   
+  /// 需要捕获的HTTP错误码列表
+  /// 比如: [404,401]
+  public static var golbalCatchHttpCodeList: [Int] = []
+  
+  /// 设置全局捕获HTTP错误码的动作
+  /// 闭包参数为：( API, 状态码，继续执行的回调: 是否将任务标记为取消)
+  public static var globalCatchHttpErrorCodeAction: ((TargetType, Int, CatchCallback ) -> Void)?
+  
+  
+  /// 设置判定领域设计(即服务器接口数据设计)请求成功的设计标记
+  public static var domainSucessKeyValePair: (String, DNDomainCode) = ("code", DNDomainCode(stringValue: "C0000"))
+  
+  public static var domainFailedMessageKey: String = "message"
+  
+//  /// 需要捕获的领域设计(即服务器接口数据设计)错误码回调
+//  /// 闭包参数为: Response的原始Data
+//  public static var needGolbalCatchDomainCodeCheckAction: ((Data)->Bool)?
+  
+  /// 设置全局捕获领域设计(即服务器接口数据设计)错误码的动作
+  /// 闭包参数为：( API, 响应原始数据，需要继续执行的回调: 是否将任务标记为取消)
+  public static var globalCatchDomainErrorAction: ((TargetType, Data, CatchCallback ) -> Void)?
+  
+//  public 
   /// 是否全局启用日志
   public static var isEnableLog = false
   
@@ -84,18 +109,6 @@ public struct Network {
                                         progress: ((Double) -> Void)? = nil,
                                         completion: @escaping Callback<Response>) -> Cancellable?
   where API: CachableTarget {
-    
-    /// 监听网络请求，自定义NetworkActivityPlugin 插件
-    //        let netWorkPlugin = NetworkActivityPlugin { (state, _) in
-    //            DispatchQueue.main.async {
-    //                switch state {
-    //                case .began:
-    //                    UIApplication.shared.isNetworkActivityIndicatorVisible = true
-    //                case .ended:
-    //                    UIApplication.shared.isNetworkActivityIndicatorVisible = false
-    //                }
-    //            }
-    //        }
     
     /// 网络请求公共设置：设置请求时长，打印请求参数和数据返回
     let requestCloure: MoyaProvider<API>.RequestClosure = { (endPoint, done) in
@@ -161,47 +174,41 @@ public struct Network {
           }
         }
         
-        let dict = try? JSONSerialization.jsonObject(with: response.data,
-                                                     options: .allowFragments) as? [String: Any]
-        if let status = dict?["status"] as? String,
-           status != StatusCode.success.rawValue {
-          
-          let message = dict?["message"] as? String
-          
-          if let handler = globalCactchNetworkError {
-            
-            handler( api, KFError(code: status, message: message ?? "请求失败")) {
-              if response.statusCode == 200 || response.statusCode == 403 {
-                completion(.success(response))
+        if response.statusCode != 200 {
+          if golbalCatchHttpCodeList.contains(response.statusCode),
+              let catchHandler = globalCatchHttpErrorCodeAction {
+            catchHandler(api, response.statusCode) {
+              action in
+              if case .markCancel = action  {
+                completion(.failure(.cancel))
+              } else {
+                completion(.failure(.init(code: .init(intValue: response.statusCode), message: response.description)))
+              }
+            }
+          } else {
+            completion(.failure(.init(code: .init(intValue: response.statusCode), message: response.description)))
+          }
+        } else {
+          if let domainCodeCatchAction = globalCatchDomainErrorAction {
+            domainCodeCatchAction(api, response.data) {
+              action in
+              if case .markCancel = action {
+                completion(.failure(.cancel))
               } else {
                 completion(.failure(.requestError))
               }
             }
           } else {
-            
-            if response.statusCode == 200 || response.statusCode == 403 {
-              completion(.success(response))
-            } else {
-              completion(.failure(.requestError))
-            }
-          }
-          
-        } else {
-          
-          if response.statusCode == 200 || response.statusCode == 403 {
             completion(.success(response))
-          } else {
-            completion(.failure(.requestError))
           }
         }
         
-        
       case .failure(let error):
-        
+
         if case .underlying(let err, _) = error {
           if let afErr = err.asAFError,
              case .explicitlyCancelled = afErr {
-            
+
             log(api:api,
                 param: nil,
                 response: nil,
@@ -215,7 +222,7 @@ public struct Network {
             response: nil,
             useTime: useTime,
             error: error.errorDescription)
-        
+
         completion(.failure(.requestError))
       }
     }

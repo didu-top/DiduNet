@@ -11,10 +11,10 @@ import Foundation
 /// 自定义一个公共网络请求的Model，根据didu.top接口返回数据格式（didu.top接口格式如：status、message、result）
 public enum ResponseModel<T> {
   /// 存在Data为空的情况，所以T泛型可能为空
-  case success(T)
+  case pass(T)
   
   /// 返回自定义Error
-  case fail(KFError)
+  case error(DNError)
   
   /// 自定义字段属性，使用Codable解析需要
   /// 注意 1.需要遵守Codingkey  2.每个字段都要枚举
@@ -26,7 +26,7 @@ public enum ResponseModel<T> {
   
   /// 构造方法，参数是泛型T，代表业务层传递进来的Model
   public init(result: T) {
-    self = .success(result)
+    self = .pass(result)
   }
 }
 
@@ -39,15 +39,15 @@ extension ResponseModel: Codable where T: Codable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     
     switch self {
-    case .success(let result):
-      try container.encode(.status(.success), forKey: .code)
+    case .pass(let result):
+      try container.encode(Network.domainSucessKeyValePair.1.raw, forKey: .code)
       try container.encode("", forKey: .message)
       if !(NoResult() is T) {
         try container.encode(result, forKey: .data)
       }
-    case .fail(let error):
+    case .error(let error):
       let status = error.code
-      try container.encode(status, forKey: .code)
+      try container.encode(status.raw, forKey: .code)
       try container.encode(error.message, forKey: .message)
     }
   }
@@ -59,50 +59,31 @@ extension ResponseModel: Codable where T: Codable {
       // 获取状态码
       let code = try container.decode(String.self, forKey: .code)
       // 检查状态是否是成功状态码
-      if code == .status(.success) {
+      if code == Network.domainSucessKeyValePair.1.raw {
         // 如果传入的是NoResult
         if NoResult() is T {
-          self = .success(NoResult() as! T) // swiftlint:disable:this force_cast
+          self = .pass(NoResult() as! T) // swiftlint:disable:this force_cast
         } else {
           // 检查result字段是否存在,如果存在是否是null值
           let resultFieldIsNil = try? container.decodeNil(forKey: .data)
           if resultFieldIsNil == nil || resultFieldIsNil == true {
             if Optional<Any>.none is T {
-              self = .success(Optional<Any>.none as! T)
+              self = .pass(Optional<Any>.none as! T)
             } else {
-              throw KFError.noResultFieldError
+              throw DNError.noResultFieldError
             }
           } else {
             let res = try container.decode(T.self, forKey: .data)
-            self = .success(res)
+            self = .pass(res)
           }
         }
       } else { // 非成功状态码处理
         let msg = (try? container.decode(String.self, forKey: .message)) ?? "请求失败"
-        throw KFError(code: code, message: msg)
+        throw DNError(code: DNDomainCode(stringValue: code), message: msg)
       }
     } catch {
       throw error
     }
-  }
-  
-  /// 提供RN的默认失败项默认失败项
-  public var defaultFailedDict: [String: Any] {
-    let dict: [String: Any] = ["status": StatusCode.clientError, "message": "操作失败"]
-    return dict
-  }
-  
-  public var dict: [String: Any] {
-    let dict = defaultFailedDict
-    guard let data = try? JSONEncoder().encode(self) else {
-      return dict
-    }
-    
-    guard let res = try? JSONSerialization.jsonObject(with: data, options: .allowFragments) else {
-      return dict
-    }
-    
-    return (res as? [String: Any]) ?? dict
   }
 }
 

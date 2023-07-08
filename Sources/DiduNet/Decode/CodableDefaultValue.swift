@@ -107,8 +107,6 @@ extension Default.ValueImpl.Zero: DefaultValueProvidable where T: Default.Number
       return 0.0 as! T
     } else if Float(0.0) is T {
       return Float(0.0) as! T
-    }  else {
-      
     }
     
     fatalError("需要实现 defaultValue ")
@@ -136,7 +134,6 @@ extension Default.ValueImpl.CustomValue : DefaultValueProvidable where T: Defaul
   
   public typealias Value = T
 }
-
 
 
 /// 如果json中key不存在 正常初始化采用默认值

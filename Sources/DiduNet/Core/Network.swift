@@ -12,14 +12,18 @@ import Foundation
 @_exported import Reachability
 import DiduFoundation
 
-public enum CatchAction {
+/// 捕获之后的动作
+public enum ActionAfterCatch {
+  /// 标记为取消
   case markCancel
-  case waitForAnotherRequestCompleted
+  /// 转移请求
+  case transferred
+  /// 继续执行
   case `continue`
 }
 
 public typealias Callback<T> = (DNResult<T>) -> Void
-public typealias CatchCallback = (CatchAction) ->Void
+public typealias CatchCallback = (ActionAfterCatch) ->Void
 
 internal let logger = Logger(lowerLevel: .verbose, prefixMap: [
   .verbose: "􀤆􀤆 - 🗒 => ",
@@ -38,7 +42,7 @@ public class Network {
   
   /// 设置全局捕获HTTP错误码的动作
   /// 闭包参数为：( API, 状态码，继续执行的回调: 是否将任务标记为取消)
-  public static var globalCatchHttpErrorCodeAction: ((TargetType, Int, CatchCallback ) -> Void)?
+  public static var globalCatchHttpErrorCodeAction: ((CachableTarget, Int, @escaping Callback<Response>, CatchCallback) -> Void)?
   
   
   /// 设置判定领域设计(即服务器接口数据设计)请求成功的设计标记
@@ -46,36 +50,19 @@ public class Network {
   
   public static var domainFailedMessageKey: String = "message"
   
-//  /// 需要捕获的领域设计(即服务器接口数据设计)错误码回调
-//  /// 闭包参数为: Response的原始Data
-//  public static var needGolbalCatchDomainCodeCheckAction: ((Data)->Bool)?
-  
   /// 设置全局捕获领域设计(即服务器接口数据设计)错误码的动作
   /// 闭包参数为：( API, 响应原始数据，需要继续执行的回调: 是否将任务标记为取消)
-  public static var globalCatchDomainErrorAction: ((TargetType, Data, CatchCallback ) -> Void)?
+  public static var domainMiddlewareAction: ((CachableTarget, Data, @escaping Callback<Response>, CatchCallback) -> Void)?
   
 //  public 
   /// 是否全局启用日志
   public static var isEnableLog = false
   
-  /// 是否开启重复网络请求检查
-  public static var isEnableRepeatRequestCheck = true
-  
   /// 默认请求超时
   public static var defaultTimeOut: Double = 30
   
-  /// 判断相同请求时间间隔
-  public static var forbidSameRequestInterval: Int64 = 300 {
-    didSet {
-      requestChecker.forbidSameRequestInterval = forbidSameRequestInterval
-    }
-  }
-  
-  /// 重复请求校验
-  static var requestChecker: RepeatRequestChecker = RepeatRequestChecker()
-  
   /// 网络联通测试主机地址
-  public static var reachableTestHost = "https://www.kfang.com"
+  public static var reachableTestHost = "https://www.google.com"
   
   private init() {}
   
@@ -140,16 +127,6 @@ public class Network {
     // 获取发送时间
     let beginTime = Date().timeIntervalSince1970
     
-    // 处理相同请求
-    if isEnableRepeatRequestCheck {
-      if !requestChecker.beforeSendRequest(api: api) {
-        if isEnableLog && enableLog {
-          logger.log(.warn, args: "发现相同请求 -- \(api.fullPath)")
-        }
-        return nil
-      }
-    }
-    
     return provider.request(api, callbackQueue: DispatchQueue.main) { resp in
       progress?(resp.progress)
     } completion: { result in
@@ -177,8 +154,16 @@ public class Network {
         if response.statusCode != 200 {
           if golbalCatchHttpCodeList.contains(response.statusCode),
               let catchHandler = globalCatchHttpErrorCodeAction {
-            catchHandler(api, response.statusCode) {
+            catchHandler(api, response.statusCode, completion) {
               action in
+              switch action {
+              case .markCancel:
+                completion(.failure(.cancel))
+              case .continue:
+                completion(.failure(.init(code: .init(intValue: response.statusCode), message: response.description)))
+              case .transferred:
+                break
+              }
               if case .markCancel = action  {
                 completion(.failure(.cancel))
               } else {
@@ -189,13 +174,16 @@ public class Network {
             completion(.failure(.init(code: .init(intValue: response.statusCode), message: response.description)))
           }
         } else {
-          if let domainCodeCatchAction = globalCatchDomainErrorAction {
-            domainCodeCatchAction(api, response.data) {
+          if let domainCodeCatchAction = domainMiddlewareAction {
+            domainCodeCatchAction(api, response.data, completion) {
               action in
-              if case .markCancel = action {
+              switch action {
+              case .markCancel:
                 completion(.failure(.cancel))
-              } else {
-                completion(.failure(.requestError))
+              case .continue:
+                completion(.success(response))
+              case .transferred:
+                break
               }
             }
           } else {

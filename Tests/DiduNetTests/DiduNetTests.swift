@@ -68,11 +68,11 @@ class RefreshTokenManager {
   
   private var queue = DispatchQueue(label: "com.xxx.refreshToken")
   
-  private var list: [(CachableTarget, Callback<Response>)] = []
+  private var list: [(CachableTarget, NetworkCallback<Response>)] = []
   
   
   
-  func checkRefreshingToken(api: CachableTarget, callback: @escaping Callback<Response> ) {
+  func checkRefreshingToken(api: CachableTarget, callback: @escaping NetworkCallback<Response> ) {
     queue.async {
       self.list.append((api, callback))
       
